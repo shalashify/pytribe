@@ -1,7 +1,6 @@
 """
 pytribe
-Use Korg Electribe 2 as Midi Sequencer
-to trigger samples from computer
+Use Korg Electribe 2 as MIDI sequencer to trigger samples from computer
 """
 
 from __future__ import division
@@ -10,98 +9,102 @@ import glob
 import sys
 import mido
 import time
+import pygame
+import configparser
 
-from pyo import *
-
-s = Server().boot()
-s.start()
+pygame.init()
+pygame.mixer.init()
 
 do_play = True
-do_record = False
-
-samples_dir = "Samples/"
-recording_dir = "Rec/"
-default_samples_set = "228"
+midi_in = mido.open_input()
 
 def load_samples(samples_path):
     global samples
-    global effects
+    global channels
+    global total_channels
 
-    default_sample_volumes = [0,0,0,0,0,0,0,30,40,100,100,100,100,30,100]
-    default_effect_volume = 10
-    samples = [None] * 16
-    effects = [None] * 16
+    samples = [None] * (total_channels + 1)
+    channels = [None] * (total_channels + 1)
+    files = [None] * (total_channels + 1)
+
     is_loaded = False
 
     # Check if directory exists
     if(len(glob.glob(samples_path)) == 0):
         return False
 
-    for i in range(15):
-       sample_file = glob.glob(samples_path + str(i+1).zfill(2) + "_*.wav")
-       if(len(sample_file)>0):
-           # Load File into Table
-           samples[i] = TableRead(table=SndTable(sample_file[0]), freq=SndTable(sample_file[0]).getRate(), loop=0, mul=float(default_sample_volumes[i]/127))
-           # Set Track Effect
-           effects[i] = Freeverb(samples[i], size=[.79,.8], damp=.9, bal=.3, mul=float(default_effect_volume/127))
-           print("Loaded " + sample_file[0])
+    # Check wav files
+    all_samples = glob.glob(samples_path + "[0-9][0-9]*.wav")
+
+    for sample in all_samples:
+        path, file = os.path.split(sample)
+        channel = int(file.split("_")[0]) or -1
+        if(channel > 0 and channel <= total_channels and len(sample) > 0):
+           samples[channel] = pygame.mixer.Sound(sample)
+           channels[channel] = pygame.mixer.Channel(channel)
+           files[channel] = file
            is_loaded = True
+
+    print("============================================================================")
+    print('Loading sample set: ' + path)
+    print('Mapped samples:')
+    for i in range(len(samples)-1):
+        if(files[i] != None):
+            print("   MIDI CHANNEL " + str(i).zfill(2) + " --> " + str(files[i]))
+    print("============================================================================")
+
     return is_loaded
-
-def rec(recording_dir):
-    global recordings
-    global samples
-    global effects
-
-    recordings = [None] * 16
-    for i in range(15):
-        if(samples[i] != None):
-            recordings[i] = Record(samples[i], recording_dir + str(i+1).zfill(2) + "_dry.wav")
-    return True
 
 def play():
     global do_play
-    global do_record
     global samples
-    global effects
-    global recordings
+    global cc_level
+    global midi_in
 
-    stop_pressed_times = 0
-    inport =  mido.open_input()
-
-    while do_play and inport.iter_pending():
-        msg = inport.receive()
-
-        if msg.type == "note_on" and msg.channel >= 8 : # Sequence
-            if(samples[msg.channel-1] != None):
-                samples[msg.channel-1].out()
-                effects[msg.channel-1].out()
-        elif msg.type == "control_change" and msg.control == 7 and msg.channel >= 8:  # Level
-            samples[msg.channel-1].setMul(float(msg.value/127))
-        elif msg.type == "control_change" and msg.control == 87: # master reverb ! not channel specific
-            for i in range(15):
-                if(effects[i] != None):
-                    effects[i].setMul(float(msg.value/127))
-        #elif(str(msg) != "clock time=0"):
-        #    print(msg)
+    while do_play and midi_in.iter_pending():
+        msg = midi_in.receive()
+        if msg.type == "note_on" :
+            #print(msg.channel)
+            if(samples[msg.channel + 1] != None):
+                channels[msg.channel + 1].play(samples[msg.channel + 1])
+        elif msg.type == "control_change":
+            if msg.control == cc_level: # level
+                if(channels[msg.channel + 1] != None):
+                    channels[msg.channel + 1].set_volume(float(msg.value/127))
+            else:
+                pass # Future logic for other cc
         elif msg.type == "program_change":
-            # reconsider
-            # samples_set = samples_dir + str(127 + 1 + msg.program + 1) + "_*/"
-            print("RECONSIDER: Trying to load sample set " + str(127 + 1 + msg.program + 1))
-            # doesnt work on the fly
-            # load_samples(samples_set)
-        elif(str(msg) == "stop time=0"):
-            if(do_record):
-                do_record = False
-                for i in range(15):
-                    if(recordings[i] != None):
-                        recordings[i].stop()
-            do_play = False
-            print("Stop signal received")
+            #print(msg.program)
+            pass # Future program change logic
+        elif(str(msg.type) == "stop"):
+            #Possible logic to stop
+            #do_play = False
+            #print(msg.type)
+            pass
+        elif(msg.type not in ("note_on", "clock", "note_off")):
+            #way to monitor remaining messages
+            #print(msg.type)
+            pass
+
+def load_config(config_file):
+    config = configparser.ConfigParser()
+
+    if(not os.path.isfile(config_file)):
+        print("Config file not found " + config_file)
+        exit()
+
+    config.read(config_file)
+
+    samples_dir = config['samples'].get('samples_dir', 'Samples')
+    default_samples_set = config['samples'].get('default_set', '100')
+    total_channels = int(config['midi'].get('total_channels', '[16]'))
+    cc_level = int(config['midi'].get('cc_level', '7'))
+
+    return samples_dir, default_samples_set, total_channels, cc_level
 
 def restart():
     global do_play
-    restart = input('Restart? (default: Yes) ') or "Y"
+    restart = input('Load another sample set? (default: Yes) ') or "Y"
     if(restart in ("Yes", "Y", "Yeah", "y", "yes")):
         do_play = True
         main()
@@ -110,26 +113,43 @@ def restart():
 
 def main():
     global do_play
-    global do_record
-    global default_samples_set
-    global sample_dir
-    global recording_dir
+    global total_channels
+    global cc_level
 
-    current_set = input('Sample Set Number? (default: 228) ') or default_samples_set
-    samples_path = samples_dir + str(current_set) + "_*/"
+    try:
+        if(len(sys.argv) > 1):
+            config_file = sys.argv[1] or 'default.ini'
+        else:
+            config_file = 'default.ini'
 
-    if(load_samples(samples_path)):
-        if((input('Record? (default: No) ') or "No") in ("Yes", "Y", "Yeah", "y", "yes")):
-            do_record = rec(recording_dir)
-        do_play = True
-        print('Rock On! Start your Electribe!')
-        while do_play:
-            play()
-            print("Exiting to main, do_play = " + str(do_play) + ", do_record = " + str(do_record))
-        restart()
-    else:
-        print("Samples could not be loaded from: " + samples_path)
-        main()
+        samples_dir, default_samples_set, total_channels, cc_level = load_config(config_file)
+
+        print("============================================================================")
+        print("Samples Directory: " + samples_dir)
+        print("Following Sets Found: ")
+        sample_sets = glob.glob(samples_dir + "/*/")
+        for sample_set in sample_sets:
+            print("  " + sample_set)
+
+        current_set = input('Which set number to use? (default: ' + default_samples_set + ') ') or default_samples_set
+        samples_path = samples_dir + "/" + str(current_set) + "_*/"
+
+        pygame.mixer.set_num_channels(total_channels + 1)
+
+        if(load_samples(samples_path)):
+            do_play = True
+            print('Ready to rock! Start your Sequencer!')
+            print('CTRL+C to exit')
+            try:
+                play()
+            except KeyboardInterrupt:
+                restart()
+        else:
+            print("No samples could be loaded from: " + samples_path)
+            main()
+    except KeyboardInterrupt:
+        pass
+
 
 if __name__ == "__main__":
     main()
