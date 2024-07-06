@@ -65,7 +65,7 @@ def _play():
             if(_samples[_msg.channel + 1] != None):
                 _channels[_msg.channel + 1].play(_samples[_msg.channel + 1])
         elif _msg.type == "control_change":
-            if _msg.control == cc_level: # level
+            if _msg.control == _cc_level: # level
                 if(_channels[_msg.channel + 1] != None):
                     _channels[_msg.channel + 1].set_volume(float(_msg.value/127))
             else:
