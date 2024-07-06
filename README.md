@@ -1,12 +1,12 @@
 # pytribe
 
-Use Korg Electribe 2 as MIDI Sequencer to trigger samples from computer.
+Use a MIDI Sequencer (tested with Korg Elecrtibe 2 and Teenage Engineering OP-Z) to trigger samples from computer.
 
-Can be useful to arrange and test different sample sets before loading them to Electribe Sampler (or any other sampler) or use computer as a sample player in combination with Electribe synths.
+Can be useful to arrange and test different sample sets before loading them to the Unit or use computer as a sample player in combination with Electribe synths.
 
 # Functions
 
-MIDI note_on messages from Electribe are used to trigger samples.
+MIDI note_on messages are used to trigger samples.
 
 Samples are loaded from source directory (configure in .ini file).
 Source directory can include multiple sets e.g.
@@ -32,9 +32,13 @@ Sample_Dir
 
 Number of the set (100, 200) can be selected via command prompt or set via .ini file.
 
-Number of the sample (01, 02, 15) within the set corresponds to Electribe 2 pad number (upper row being 1-8, lower row 9-16). Number of the sample is thus used to map a sample to a MIDI Channel. Only channels that have samples assigned to them will be treated as relevant. Thus it is possible to trigger samples at computer and play Electribe's own synths in parallel.
+Number of the sample (01, 02, 15) within the set corresponds to Electribe 2 pad number (upper row being 1-8, lower row 9-16) or OP-Zs track number. Number of the sample is thus used to map a sample to a MIDI Channel. Only channels that have samples assigned to them will be treated as relevant. Thus it is possible to trigger samples at computer and play Electribe's own synths in parallel.
 
-Level knob controls of the respective channel at Electribe controls the level of each sample.
+Level knob of the respective channel controls the level of each sample. Make sure to set the level cc value for your device correctly via the .ini file.
+Korg Electribe 2: 7
+Teenage Engineering OP-Z: 16 
+
+Other cc messages are not yet implemented. See https://teenage.engineering/guides/op-z/midi
 
 # Example
 
